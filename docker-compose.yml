@@ -1,0 +1,11 @@
+services:
+  searchable-pdf:
+    build: .
+    container_name: searchable-pdf-ocr
+    ports:
+      - "8000:8000"
+    volumes:
+      - ocr_data:/data
+    restart: unless-stopped
+volumes:
+  ocr_data:

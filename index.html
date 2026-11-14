@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Searchable PDF OCR</title>
+  <style>
+    :root{font-family:Inter,system-ui,Arial,sans-serif;color:#172033;background:#f4f7fb}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px}
+    .shell{width:min(760px,100%)}.brand{font-size:14px;font-weight:800;letter-spacing:.12em;color:#4b63d3;margin-bottom:14px}
+    h1{font-size:clamp(30px,5vw,46px);line-height:1.08;margin:0 0 12px;letter-spacing:-.04em}
+    .sub{color:#647087;line-height:1.6;margin:0 0 26px}
+    .panel{background:white;border:1px solid #e4e9f2;border-radius:22px;padding:26px;box-shadow:0 18px 55px #1b2b4b0d}
+    .drop{border:2px dashed #cbd4e6;border-radius:16px;padding:30px 18px;text-align:center;background:#fafbfe;cursor:pointer}
+    .drop.drag{border-color:#5369d8;background:#f1f4ff}.drop strong{display:block;margin:10px 0 5px}
+    .muted{font-size:13px;color:#778198}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+    label{display:block;font-size:13px;font-weight:700;margin-bottom:7px;color:#34405a}
+    select{width:100%;padding:12px;border:1px solid #d9dfeb;border-radius:10px;background:white;font:inherit}
+    button,.download{border:0;border-radius:11px;background:#4e62d5;color:white;font-weight:750;padding:14px 20px;font:inherit;cursor:pointer;text-decoration:none;display:inline-flex;justify-content:center;align-items:center}
+    button{width:100%;margin-top:20px}button:disabled{opacity:.5;cursor:not-allowed}
+    .file{margin-top:14px;font-size:13px;color:#43506b;overflow-wrap:anywhere}
+    .status{display:none;margin-top:22px;padding:18px;background:#f7f8fc;border-radius:14px}
+    .status.show{display:block}.statusline{display:flex;justify-content:space-between;gap:12px;font-size:13px;font-weight:700}
+    .track{height:10px;background:#e3e7f1;border-radius:20px;overflow:hidden;margin:12px 0}
+    .bar{height:100%;width:0;background:#5369d8;transition:width .3s}
+    #message{font-size:13px;color:#657089;line-height:1.5;white-space:pre-wrap}
+    .download{display:none;margin-top:14px}.note{font-size:12px;color:#7a8498;line-height:1.55;margin-top:18px}
+    @media(max-width:560px){.row{grid-template-columns:1fr}.panel{padding:18px}body{padding:14px}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <div class="brand">PDF TOOLKIT / OCR</div>
+  <h1>Make scanned PDFs searchable.</h1>
+  <p class="sub">Turn image-only scanned documents into digitally searchable PDFs. Built to process large documents, including 1,500+ pages, in manageable batches.</p>
+  <section class="panel">
+    <div class="drop" id="drop">
+      <div style="font-size:32px">📄</div>
+      <strong>Choose a scanned PDF</strong>
+      <div class="muted">or drag and drop it here</div>
+      <div class="muted" style="margin-top:8px">PDF files only</div>
+      <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+    </div>
+    <div class="file" id="filename">No file selected</div>
+    <div class="row">
+      <div><label for="language">OCR language</label>
+        <select id="language">
+          <option value="eng">English</option><option value="tam">Tamil</option>
+          <option value="eng+tam">English + Tamil</option><option value="hin">Hindi</option>
+          <option value="eng+hin">English + Hindi</option><option value="fra">French</option>
+          <option value="deu">German</option><option value="spa">Spanish</option>
+        </select>
+      </div>
+      <div><label for="chunk">Pages per batch</label>
+        <select id="chunk"><option value="25">25 pages</option><option value="50" selected>50 pages</option><option value="100">100 pages</option><option value="200">200 pages</option></select>
+      </div>
+    </div>
+    <button id="start" disabled>Upload and run OCR</button>
+    <div class="status" id="status">
+      <div class="statusline"><span id="stage">Preparing…</span><span id="percent">0%</span></div>
+      <div class="track"><div class="bar" id="bar"></div></div>
+      <div id="message">Please keep this page open while your PDF is processing.</div>
+      <a class="download" id="download" href="#">Download searchable PDF</a>
+    </div>
+    <p class="note">No artificial page-count limit is set by this app. Very large files still require sufficient server storage, memory, processing time, and a stable connection. Your uploaded document is processed on the server running this website.</p>
+  </section>
+</main>
+<script>
+const fileInput=document.getElementById('file'), drop=document.getElementById('drop');
+const start=document.getElementById('start'), filename=document.getElementById('filename');
+let selected=null, poller=null;
+drop.addEventListener('click',()=>fileInput.click());
+fileInput.addEventListener('change',()=>choose(fileInput.files[0]));
+function choose(f){if(!f)return;if(f.type!=='application/pdf'&&!f.name.toLowerCase().endsWith('.pdf')){alert('Please choose a PDF file.');return}
+ selected=f;filename.textContent=`Selected: ${f.name} (${(f.size/1024/1024).toFixed(1)} MB)`;start.disabled=false;}
+['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('drag')}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('drag')}));
+drop.addEventListener('drop',ev=>choose(ev.dataTransfer.files[0]));
+start.addEventListener('click',async()=>{
+ if(!selected)return;start.disabled=true;start.textContent='Uploading…';
+ document.getElementById('status').classList.add('show');document.getElementById('download').style.display='none';
+ const data=new FormData();data.append('file',selected);data.append('language',document.getElementById('language').value);data.append('chunk_size',document.getElementById('chunk').value);
+ try{
+  const response=await fetch('/api/ocr',{method:'POST',body:data});const result=await response.json();
+  if(!response.ok)throw new Error(result.detail||'Upload failed');
+  start.textContent='OCR running…';poller=setInterval(()=>poll(result.job_id),1500);poll(result.job_id);
+ }catch(e){document.getElementById('message').textContent=e.message;start.disabled=false;start.textContent='Try again';}
+});
+async function poll(id){
+ try{const r=await fetch('/api/status/'+id);const j=await r.json();if(!r.ok)throw new Error(j.detail);
+  document.getElementById('stage').textContent=j.status==='queued'?'Queued':j.status==='processing'?'Processing pages':j.status==='completed'?'Completed':'Failed';
+  document.getElementById('percent').textContent=(j.progress||0)+'%';document.getElementById('bar').style.width=(j.progress||0)+'%';
+  document.getElementById('message').textContent=j.message||'';
+  if(j.status==='completed'){clearInterval(poller);const a=document.getElementById('download');a.href='/api/download/'+id;a.style.display='inline-flex';start.disabled=false;start.textContent='Process another PDF';}
+  if(j.status==='failed'){clearInterval(poller);start.disabled=false;start.textContent='Try again';}
+ }catch(e){document.getElementById('message').textContent=e.message;clearInterval(poller);start.disabled=false;start.textContent='Try again';}
+}
+</script>
+</body></html>
